@@ -16,9 +16,9 @@ export class AIService {
     this.apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
     this.modelId = 'google/gemini-3.5-flash';
     this.apiKey = null;
-    this.useMock = true;
+    this.useMock = false;
     this.callHistory = [];
-    this._loadApiKey();
+    this._loadConfig();
     this._usedDialogues = new Set();
   }
 
@@ -33,29 +33,37 @@ export class AIService {
     return selected;
   }
 
-  _loadApiKey() {
+  _loadConfig() {
     if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_OPENROUTER_API_KEY) {
       this.apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
+    }
+    if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_OPENROUTER_MODEL_ID) {
+      this.modelId = process.env.NEXT_PUBLIC_OPENROUTER_MODEL_ID;
     }
     if (typeof window !== 'undefined' && window.MINDTRAP_CONFIG?.OPENROUTER_API_KEY) {
       this.apiKey = window.MINDTRAP_CONFIG.OPENROUTER_API_KEY;
     }
-    if (this.apiKey) {
-      this.useMock = false;
+    if (typeof window !== 'undefined' && window.MINDTRAP_CONFIG?.openRouter?.modelId) {
+      this.modelId = window.MINDTRAP_CONFIG.openRouter.modelId;
     }
   }
 
   setApiKey(apiKey) {
     this.apiKey = apiKey;
-    this.useMock = !apiKey;
+    this.useMock = false;
+  }
+
+  setModelId(modelId) {
+    if (modelId) {
+      this.modelId = modelId;
+    }
   }
 
   async chatCompletion({ messages, maxTokens = 500, temperature = 0.7 }) {
     const requestStart = Date.now();
 
-    if (this.useMock || !this.apiKey) {
-      console.warn('AIService: Running in mock mode (no API key)');
-      return this._getMockResponse(messages);
+    if (!this.apiKey) {
+      throw new Error('OpenRouter API key is not configured.');
     }
 
     try {
@@ -87,15 +95,7 @@ export class AIService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        // 401 인증 오류 시 자동으로 mock 모드로 전환하여 이후 API 호출 중단
-        if (response.status === 401 || response.status === 403) {
-          console.warn(`AIService: API key invalid (${response.status}). Switching to mock mode.`);
-          this.useMock = true;
-          this.apiKey = null;
-          return this._getMockResponse(messages);
-        }
-        console.warn(`AIService API Error: ${response.status} ${response.statusText}`, errorText);
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        throw new Error(`OpenRouter API Error: ${response.status} ${response.statusText} ${errorText}`);
       }
 
       const data = await response.json();
@@ -119,7 +119,7 @@ export class AIService {
       return { content, usage: data.usage, requestTime };
     } catch (error) {
       console.error('AIService Error:', error);
-      return this._getMockResponse(messages);
+      throw error;
     }
   }
 

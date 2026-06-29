@@ -132,32 +132,6 @@ export class AIEngine {
    * @private
    */
   async _generateRoundDialogue({ playerSnapshot, currentRound, currentQuestion, prediction, memorySummary }) {
-    // mock 모드인 경우 BehaviorAnalyzer 기반 심리전 대사 생성
-    if (this.aiService.useMock) {
-      const analysis = this.behaviorAnalyzer.analyze(
-        playerSnapshot,
-        null,
-        this.learningJournal
-      );
-      const dialogue = this.behaviorAnalyzer.generatePsychologicalDialogue(analysis, {
-        round: currentRound,
-        wasCorrect: null,
-        roundData: null,
-        currentQuestion,
-      });
-      const processed = this.personality.postProcess(dialogue);
-
-      this.lastDialogue = processed;
-      this.dialogueHistory.push({
-        round: currentRound,
-        dialogue: processed,
-        type: 'round_progress',
-        timestamp: Date.now(),
-      });
-
-      return processed;
-    }
-
     // 프롬프트 빌드
     const messages = this.promptBuilder.buildRoundProgressPrompt({
       playerModel: playerSnapshot,
@@ -234,31 +208,6 @@ export class AIEngine {
       return '';
     }
 
-    // mock 모드인 경우 BehaviorAnalyzer 기반 심리전 대사 생성
-    if (this.aiService.useMock) {
-      const playerSnapshot = this.learningEngine.getPlayerSnapshot();
-      const analysis = this.behaviorAnalyzer.analyze(
-        playerSnapshot,
-        roundData,
-        this.learningJournal
-      );
-      const dialogue = this.behaviorAnalyzer.generatePsychologicalDialogue(analysis, {
-        round: this.learningEngine.playerModel.analyzedRounds,
-        wasCorrect,
-        roundData,
-      });
-      const processed = this.personality.postProcess(dialogue);
-
-      this.dialogueHistory.push({
-        round: this.learningEngine.playerModel.analyzedRounds,
-        dialogue: processed,
-        type: wasCorrect ? 'prediction_success' : 'prediction_failure',
-        timestamp: Date.now(),
-      });
-
-      return processed;
-    }
-
     const messages = wasCorrect
       ? this.promptBuilder.buildPredictionSuccessPrompt({
           prediction: this.lastPrediction,
@@ -297,30 +246,6 @@ export class AIEngine {
    */
   async _generateChoiceReactionDialogue(roundData) {
     const playerSnapshot = this.learningEngine.getPlayerSnapshot();
-
-    // mock 모드인 경우 BehaviorAnalyzer 기반 심리전 대사 생성
-    if (this.aiService.useMock) {
-      const analysis = this.behaviorAnalyzer.analyze(
-        playerSnapshot,
-        roundData,
-        this.learningJournal
-      );
-      const dialogue = this.behaviorAnalyzer.generatePsychologicalDialogue(analysis, {
-        round: roundData.round,
-        wasCorrect: null,
-        roundData,
-      });
-      const processed = this.personality.postProcess(dialogue);
-
-      this.dialogueHistory.push({
-        round: roundData.round,
-        dialogue: processed,
-        type: 'choice_reaction',
-        timestamp: Date.now(),
-      });
-
-      return processed;
-    }
 
     const messages = this.promptBuilder.buildChoiceReactionPrompt({
       playerModel: playerSnapshot,
@@ -367,22 +292,12 @@ export class AIEngine {
     });
 
     let report;
-    try {
-      const response = await this.aiService.chatCompletion({
-        messages,
-        maxTokens: 2000,
-        temperature: 0.5,
-      });
-      report = this.personality.postProcess(response.content.trim());
-
-      // mock 응답인 경우 실제 데이터 기반으로 리포트 생성
-      if (response.isMock) {
-        report = this._generateDataDrivenReport(playerSnapshot, patterns, learningSummary, userName);
-      }
-    } catch (error) {
-      console.error('AI final report error:', error);
-      report = this._generateDataDrivenReport(playerSnapshot, patterns, learningSummary, userName);
-    }
+    const response = await this.aiService.chatCompletion({
+      messages,
+      maxTokens: 2000,
+      temperature: 0.5,
+    });
+    report = this.personality.postProcess(response.content.trim());
 
     report = this._applyReportAddress(report, userName);
 
@@ -538,6 +453,14 @@ export class AIEngine {
    */
   setApiKey(apiKey) {
     this.aiService.setApiKey(apiKey);
+  }
+
+  /**
+   * OpenRouter 모델 ID 설정
+   * @param {string} modelId - OpenRouter 모델 ID
+   */
+  setModelId(modelId) {
+    this.aiService.setModelId(modelId);
   }
 
   /**

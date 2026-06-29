@@ -51,23 +51,29 @@ export class MindTrap {
    */
   _loadAiApiKey() {
     let apiKey = null;
+    let modelId = null;
 
     // window 전역 설정에서 로드 (Next.js page.js에서 주입)
     if (typeof window !== 'undefined' && window.MINDTRAP_CONFIG) {
       apiKey = window.MINDTRAP_CONFIG.OPENROUTER_API_KEY ||
                window.MINDTRAP_CONFIG.openRouter?.apiKey || null;
+      modelId = window.MINDTRAP_CONFIG.openRouter?.modelId || null;
     }
 
     // process.env에서 로드 (빌드 타임)
     if (!apiKey && typeof process !== 'undefined' && process.env) {
       apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || null;
     }
+    if (!modelId && typeof process !== 'undefined' && process.env) {
+      modelId = process.env.NEXT_PUBLIC_OPENROUTER_MODEL_ID || null;
+    }
 
     if (apiKey) {
       this.aiEngine.setApiKey(apiKey);
+      this.aiEngine.setModelId(modelId || 'google/gemini-3.5-flash');
       console.log('%c AI Engine: API Key configured ', 'background: #10b981; color: white; padding: 2px 6px; border-radius: 3px;');
     } else {
-      console.warn('AI Engine: API Key not found - falling back to mock mode');
+      console.error('AI Engine: OpenRouter API Key not found. Real AI calls are required.');
     }
   }
 
