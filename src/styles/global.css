@@ -1,0 +1,233 @@
+/**
+ * MindTrap - Global Styles
+ * Apple + OpenAI + Linear 스타일
+ */
+
+/* ========== Reset & Base ========== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Base styles only - theme variables are in theme.css */
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+/* ========== App Container ========== */
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========== Screen Base ========== */
+.screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  padding: var(--spacing-lg);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* ========== Animations ========== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fade-in {
+  animation: fadeIn var(--transition-normal) forwards;
+}
+
+.fade-in-up {
+  animation: fadeInUp var(--transition-slow) forwards;
+}
+
+.scale-in {
+  animation: scaleIn var(--transition-normal) forwards;
+}
+
+/* ========== Text Gradient ========== */
+.text-gradient {
+  background: var(--color-accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ========== Glassmorphism Card ========== */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* ========== Focus Styles (Accessibility) ========== */
+:focus-visible {
+  outline: 2px solid var(--color-accent-blue);
+  outline-offset: 2px;
+}
+
+/* ========== Selection ========== */
+::selection {
+  background: var(--color-accent-blue);
+  color: var(--color-text-primary);
+}
+
+/* ========== Loading Spinner ========== */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-bg-tertiary);
+  border-top-color: var(--color-accent-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* ========== Skeleton Loading ========== */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-tertiary) 25%,
+    var(--color-bg-secondary) 50%,
+    var(--color-bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+  :root {
+    --font-size-3xl: 36px;
+    --font-size-2xl: 28px;
+    --font-size-xl: 20px;
+  }
+  
+  .screen {
+    padding: var(--spacing-md);
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --font-size-3xl: 28px;
+    --font-size-2xl: 24px;
+    --font-size-xl: 18px;
+  }
+  
+  .screen {
+    padding: var(--spacing-sm);
+  }
+}
+
+/* ========== Reduced Motion ========== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

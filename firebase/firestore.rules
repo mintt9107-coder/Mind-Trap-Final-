@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 사용자별 데이터 접근 규칙
+    match /users/{userId} {
+      // 사용자는 자신의 데이터만 읽기/쓰기 가능
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Profile 서브컬렉션
+      match /profile/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // PlayerModel 서브컬렉션
+      match /playerModel/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Memory 서브컬렉션
+      match /memory/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Sessions 서브컬렉션
+      match /sessions/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Reports 서브컬렉션
+      match /reports/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Statistics 서브컬렉션
+      match /statistics/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // 다른 모든 경로 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
