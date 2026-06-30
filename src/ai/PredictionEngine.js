@@ -78,8 +78,12 @@ export class PredictionEngine {
 
     // 반복 패턴 분석
     if (recentChoices.length > 0) {
-      const lastChoice = recentChoices[recentChoices.length - 1].choice;
-      analysis.repeatFactor = lastChoice === 'primary' ? 0.3 : -0.3;
+      const lastDirectionalChoice = [...recentChoices]
+        .reverse()
+        .find((choice) => choice.choice === 'primary' || choice.choice === 'secondary');
+      if (lastDirectionalChoice) {
+        analysis.repeatFactor = lastDirectionalChoice.choice === 'primary' ? 0.3 : -0.3;
+      }
     }
 
     // 일관성 분석

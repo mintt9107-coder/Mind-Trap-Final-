@@ -31,6 +31,7 @@ export class BehaviorAnalyzer {
       riskProfile: this._analyzeRiskProfile(attrs, recentChoices),
       adaptationAnalysis: this._analyzeAdaptation(attrs, recentChoices),
       hesitationAnalysis: this._analyzeHesitation(attrs, recentChoices),
+      intentPattern: this._analyzeIntentPattern(recentChoices, choiceFrequency, attrs),
       currentBehavior: roundData ? this._analyzeCurrentBehavior(roundData, attrs) : null,
       evidenceList: this._collectEvidence(attrs, recentChoices, choiceFrequency, analyzedRounds),
       psychologicalPressure: this._generatePsychologicalPressure(attrs, analyzedRounds, recentChoices),
@@ -122,8 +123,15 @@ export class BehaviorAnalyzer {
    * @private
    */
   _analyzeChoicePattern(recentChoices, choiceFrequency, attrs) {
-    const primaryCount = choiceFrequency['primary'] || 0;
-    const secondaryCount = choiceFrequency['secondary'] || 0;
+    const directionalChoices = recentChoices.filter((choice) => (
+      !choice.timeOut && (choice.choice === 'primary' || choice.choice === 'secondary')
+    ));
+    const primaryCount = directionalChoices.filter((choice) => choice.choice === 'primary').length
+      || choiceFrequency['primary']
+      || 0;
+    const secondaryCount = directionalChoices.filter((choice) => choice.choice === 'secondary').length
+      || choiceFrequency['secondary']
+      || 0;
     const total = primaryCount + secondaryCount;
 
     if (total === 0) {
@@ -144,8 +152,8 @@ export class BehaviorAnalyzer {
     // 연속 선택 분석
     let currentStreak = 1;
     let maxStreak = 1;
-    for (let i = 1; i < recentChoices.length; i++) {
-      if (recentChoices[i].choice === recentChoices[i - 1].choice) {
+    for (let i = 1; i < directionalChoices.length; i++) {
+      if (directionalChoices[i].choice === directionalChoices[i - 1].choice) {
         currentStreak++;
         maxStreak = Math.max(maxStreak, currentStreak);
       } else {
@@ -155,12 +163,14 @@ export class BehaviorAnalyzer {
 
     // 교대 패턴 감지
     let alternationCount = 0;
-    for (let i = 1; i < recentChoices.length; i++) {
-      if (recentChoices[i].choice !== recentChoices[i - 1].choice) {
+    for (let i = 1; i < directionalChoices.length; i++) {
+      if (directionalChoices[i].choice !== directionalChoices[i - 1].choice) {
         alternationCount++;
       }
     }
-    const alternationRate = recentChoices.length > 1 ? alternationCount / (recentChoices.length - 1) : 0;
+    const alternationRate = directionalChoices.length > 1
+      ? alternationCount / (directionalChoices.length - 1)
+      : 0;
 
     let description = '';
     let insight = '';
@@ -177,12 +187,12 @@ export class BehaviorAnalyzer {
     }
 
     // 연속 패턴 인사이트
-    if (maxStreak >= 3) {
+    if (maxStreak >= 4) {
       insight += ` ${maxStreak}회 연속 같은 선택을 했습니다. 습관이 굳어가고 있습니다.`;
     }
 
     // 교대 패턴 인사이트
-    if (alternationRate > 0.7 && recentChoices.length > 3) {
+    if (alternationRate > 0.7 && directionalChoices.length > 4) {
       insight += ' 의도적으로 선택을 번갈아 하고 있습니다. AI를 속이려는 시도가 보입니다. 하지만 그것도 패턴입니다.';
     }
 
@@ -194,6 +204,106 @@ export class BehaviorAnalyzer {
       alternationRate,
       description,
       insight,
+    };
+  }
+
+  _analyzeIntentPattern(recentChoices, _choiceFrequency, attrs) {
+    const directionalChoices = recentChoices.filter((choice) => (
+      !choice.timeOut && (choice.choice === 'primary' || choice.choice === 'secondary')
+    ));
+    const totalChoices = directionalChoices.length;
+    const recentClicked = recentChoices.filter((choice) => !choice.timeOut && choice.reactionTime > 0);
+    const fastClicked = recentClicked.filter((choice) => choice.reactionTime < 1200);
+    const veryFastClicked = recentClicked.filter((choice) => choice.reactionTime < 900);
+    const fastRate = recentClicked.length ? fastClicked.length / recentClicked.length : 0;
+    const veryFastRate = recentClicked.length ? veryFastClicked.length / recentClicked.length : 0;
+    const latest = recentChoices[recentChoices.length - 1] || null;
+
+    let alternationCount = 0;
+    for (let i = 1; i < recentClicked.length; i++) {
+      if (recentClicked[i].choice !== recentClicked[i - 1].choice) {
+        alternationCount++;
+      }
+    }
+    const alternationRate = recentClicked.length > 1
+      ? alternationCount / (recentClicked.length - 1)
+      : 0;
+
+    let maxStreak = 1;
+    let currentStreak = 1;
+    for (let i = 1; i < directionalChoices.length; i++) {
+      if (directionalChoices[i].choice === directionalChoices[i - 1].choice) {
+        currentStreak++;
+        maxStreak = Math.max(maxStreak, currentStreak);
+      } else {
+        currentStreak = 1;
+      }
+    }
+
+    const directionalFrequency = directionalChoices.reduce((counts, choice) => {
+      counts[choice.choice] = (counts[choice.choice] || 0) + 1;
+      return counts;
+    }, {});
+    const dominantEntry = Object.entries(directionalFrequency)
+      .sort((a, b) => b[1] - a[1])[0];
+    const dominantChoice = dominantEntry?.[0] || null;
+    const dominantRatio = totalChoices > 0 && dominantEntry
+      ? dominantEntry[1] / totalChoices
+      : 0;
+
+    const typeGroups = recentClicked.reduce((groups, choice) => {
+      const key = choice.questionType || 'unknown';
+      groups[key] = groups[key] || new Set();
+      groups[key].add(choice.choice);
+      return groups;
+    }, {});
+    const variedSameType = Object.values(typeGroups).some((set) => set.size >= 3)
+      || (alternationRate >= 0.75 && recentClicked.length >= 5);
+
+    let type = 'natural';
+    let score = 45;
+    let label = '자연스러운 탐색';
+    let description = '선택을 바꾸긴 했지만, 강한 회피 의도보다는 상황에 따라 판단 기준을 조정한 흐름에 가깝습니다.';
+
+    if (totalChoices >= 6 && dominantRatio >= 0.8 && maxStreak >= 4) {
+      type = 'button_bias';
+      score = Math.min(95, Math.round(dominantRatio * 100));
+      label = '한쪽 버튼 고착';
+      description = `같은 쪽 선택이 ${Math.round(dominantRatio * 100)}%로 높습니다. 의식하지 못한 습관일 수도 있고, 빠르게 넘기기 위해 한쪽 버튼을 고정한 전략일 수도 있습니다. 어느 쪽이든 AI가 읽기 쉬운 흔적입니다.`;
+    } else if (recentClicked.length >= 5 && fastRate >= 0.7 && (variedSameType || alternationRate >= 0.65)) {
+      type = 'random_masking';
+      score = Math.min(95, Math.round(70 + fastRate * 20 + alternationRate * 10));
+      label = '무작위 위장 시도';
+      description = '빠른 속도로 선택을 섞었습니다. 겉보기에는 랜덤처럼 보이지만, 예측을 피하려는 의도가 선택 속도와 변동성에 함께 남았습니다.';
+    } else if (recentClicked.length >= 4 && veryFastRate >= 0.65) {
+      type = 'speed_masking';
+      score = Math.min(90, Math.round(65 + veryFastRate * 25));
+      label = '속도 기반 회피';
+      description = '지나치게 빠른 선택이 반복되었습니다. 직관적 판단일 수도 있지만, AI가 분석할 시간을 주지 않으려는 회피 전략으로도 해석됩니다.';
+    } else if (directionalChoices.length >= 5 && maxStreak >= 4) {
+      type = 'streak';
+      score = Math.min(88, 55 + maxStreak * 8);
+      label = '반복 고정';
+      description = `${maxStreak}회 연속 같은 방향을 택했습니다. 안정적인 기준일 수도 있지만, 피로하거나 선택을 단순화하려는 의도가 섞였을 수 있습니다.`;
+    } else if (attrs.adaptation > 65 && alternationRate >= 0.55) {
+      type = 'strategic_shift';
+      score = Math.min(82, Math.round(attrs.adaptation * 0.7 + alternationRate * 30));
+      label = '전략적 흔들기';
+      description = '선택을 바꾸며 AI의 예측을 흔들려는 움직임이 보입니다. 다만 바꾸는 타이밍 자체가 새로운 패턴이 됩니다.';
+    }
+
+    return {
+      type,
+      score,
+      label,
+      description,
+      fastRate,
+      veryFastRate,
+      alternationRate,
+      maxStreak,
+      dominantChoice,
+      dominantRatio,
+      latestChoice: latest,
     };
   }
 
@@ -545,6 +655,19 @@ export class BehaviorAnalyzer {
    */
   _generatePsychologicalPressure(attrs, analyzedRounds, recentChoices) {
     const pressures = [];
+    const directionalChoices = recentChoices.filter((choice) => (
+      !choice.timeOut && (choice.choice === 'primary' || choice.choice === 'secondary')
+    ));
+    let currentStreak = 1;
+    let maxStreak = 1;
+    for (let i = 1; i < directionalChoices.length; i++) {
+      if (directionalChoices[i].choice === directionalChoices[i - 1].choice) {
+        currentStreak++;
+        maxStreak = Math.max(maxStreak, currentStreak);
+      } else {
+        currentStreak = 1;
+      }
+    }
 
     // 예측 가능성 압박
     if (attrs.consistency > 65) {
@@ -556,7 +679,7 @@ export class BehaviorAnalyzer {
     }
 
     // 일관성 압박
-    if (attrs.repeat > 50) {
+    if (directionalChoices.length >= 5 && maxStreak >= 4) {
       pressures.push({
         type: 'repetition',
         message: '같은 선택을 반복하고 있습니다. 습관이 당신을 지배하고 있습니다.',
@@ -933,14 +1056,14 @@ export class BehaviorAnalyzer {
     }
 
     // 패턴 지적
-    if (choicePattern && choicePattern.balance > 0.5) {
+    if (choicePattern && choicePattern.balance > 0.65 && choicePattern.maxStreak >= 4) {
       pools.push(
         `당신은 ${choicePattern.dominantChoice === 'primary' ? '한쪽' : '다른 쪽'}에 편향되어 있습니다. ${Math.round(choicePattern.primaryRatio * 100)}%의 선택이 같은 방향입니다. 이것이 가치관인가요, 아니면 습관인가요?`,
         `선택의 ${Math.round(choicePattern.primaryRatio * 100)}%가 같은 패턴입니다. 의식하지 못하는 편향이 보입니다.`
       );
     }
 
-    if (choicePattern && choicePattern.maxStreak >= 3) {
+    if (choicePattern && choicePattern.maxStreak >= 4) {
       pools.push(
         `${choicePattern.maxStreak}회 연속 같은 선택. 습관이 굳어가고 있습니다. 언제까지 이 패턴을 유지할 수 있을까요?`
       );
@@ -1143,23 +1266,34 @@ export class BehaviorAnalyzer {
     const namePrefix = userName ? `${userName}님은 ` : '당신은 ';
     const vulnerabilities = analysis.vulnerabilities;
     const pressure = analysis.psychologicalPressure;
+    const intentPattern = analysis.intentPattern || {
+      type: 'natural',
+      score: 45,
+      label: '자연스러운 탐색',
+      description: '상황에 따라 판단 기준을 조정한 흐름입니다.',
+    };
     const measuredHesitation = Number.isFinite(learningSummary?.featureSummary?.avgHesitation)
       ? Math.round(learningSummary.featureSummary.avgHesitation)
       : attrs.hesitation;
 
-    // 위험 성향 상세 분석
-    let riskAnalysis = '';
-    if (attrs.risk > 70) {
-      riskAnalysis = `${attrs.risk}% - 극단적 위험 선호. 불확실성 속에서도 과감하게 행동하며, 손실보다 가능성에 더 강하게 반응합니다. 충동적 결정은 후회를 동반하기 쉽습니다.`;
-    } else if (attrs.risk > 55) {
-      riskAnalysis = `${attrs.risk}% - 위험 선호 성향. 기회가 보이면 움직이는 편입니다. ${behaviorProfile.isFast ? '실제 클릭 속도도 빨라 위험 판단이 실행으로 바로 이어졌습니다.' : '다만 실제 선택 속도는 과도하게 빠르지 않아 무작정 뛰어드는 성향은 아닙니다.'}`;
-    } else if (attrs.risk > 40) {
-      riskAnalysis = `${attrs.risk}% - 중도적 위험 성향. 위험과 안전 사이에서 균형을 찾는 편입니다. 상황을 보고 태도를 바꾸는 유연함이 있습니다.`;
-    } else if (attrs.risk > 25) {
-      riskAnalysis = `${attrs.risk}% - 안전 선호 성향. 확실한 선택을 선호하며 손실을 줄이려는 경향이 강합니다. 기회보다 안정감을 먼저 확인합니다.`;
+    // 안전 선호 성향 상세 분석
+    const safetyScore = Math.max(0, Math.min(100, 100 - attrs.risk));
+    let safetyAnalysis = '';
+    if (safetyScore > 70) {
+      safetyAnalysis = `${safetyScore}% - 강한 안전 선호. 손실 가능성을 먼저 줄이려 하며, 확실한 선택에서 안정감을 느낍니다. 기회보다 위험 회피가 앞서는 흐름입니다.`;
+    } else if (safetyScore > 55) {
+      safetyAnalysis = `${safetyScore}% - 안전 우선 성향. 큰 보상보다 실패 가능성을 먼저 계산합니다. 다만 상황이 유리하다고 느끼면 선택 기준을 바꿀 여지는 있습니다.`;
+    } else if (safetyScore > 40) {
+      safetyAnalysis = `${safetyScore}% - 균형형 안전 감각. 위험과 안정 사이를 오가며, 질문의 맥락에 따라 판단을 조정합니다.`;
+    } else if (safetyScore > 25) {
+      safetyAnalysis = `${safetyScore}% - 낮은 안전 선호. 안전보다 가능성이나 보상에 더 빠르게 반응하는 편입니다.`;
     } else {
-      riskAnalysis = `${attrs.risk}% - 극단적 안전 선호. 위험을 철저히 피하려는 경향이 있습니다. 불안이 커질수록 선택의 폭을 스스로 좁힐 수 있습니다.`;
+      safetyAnalysis = `${safetyScore}% - 매우 낮은 안전 선호. 손실 가능성보다 기회를 놓치는 것에 더 민감하게 움직였습니다.`;
     }
+
+    const patternDescriptions = patterns.length > 0
+      ? patterns.map((p) => p.description).join(', ')
+      : '특별한 패턴이 감지되지 않았습니다';
 
     // 일관성 상세 분석
     let consistencyAnalysis = '';
@@ -1172,6 +1306,9 @@ export class BehaviorAnalyzer {
     } else {
       consistencyAnalysis = `${attrs.consistency}% - 낮은 일관성. 선택이 자주 바뀌는 편입니다. 즉흥성과 전략적 변화가 함께 나타날 수 있습니다.`;
     }
+
+    const patternConsistencyScore = Math.round((attrs.repeat + attrs.consistency) / 2);
+    const patternConsistencyAnalysis = `${patternConsistencyScore}% - ${patternConsistencyScore > 70 ? '높은 반복성' : patternConsistencyScore > 45 ? '부분적 반복성' : '낮은 반복성'}. ${patternDescriptions || '선택 기준을 추적 중입니다.'} 일관성과 반복 선택을 함께 보면 AI가 읽을 수 있는 흔적이 이 정도로 남았습니다.`;
 
     // 망설임 상세 분석
     let hesitationAnalysis = '';
@@ -1213,16 +1350,20 @@ export class BehaviorAnalyzer {
     if (analysis.choicePattern && analysis.choicePattern.dominantChoice) {
       choiceAnalysis = `${analysis.choicePattern.description}. ${analysis.choicePattern.insight}`;
     }
-
-    // 패턴 설명
-    const patternDescriptions = patterns.length > 0
-      ? patterns.map((p) => p.description).join(', ')
-      : '특별한 패턴이 감지되지 않았습니다';
+    if (intentPattern.type !== 'natural') {
+      choiceAnalysis += ` ${intentPattern.label}: ${intentPattern.description}`;
+    }
 
     // 한 줄 피드백
     let feedback = '';
     if (attrs.consistency > 70) {
       feedback = `${namePrefix}예측 가능한 패턴을 유지했습니다. 자유 의지를 의심해 볼 필요가 있습니다.`;
+    } else if (intentPattern.type === 'random_masking') {
+      feedback = `${namePrefix}랜덤처럼 보이려 했지만, 빠르게 섞는 방식 자체가 새로운 패턴이 되었습니다.`;
+    } else if (intentPattern.type === 'speed_masking') {
+      feedback = `${namePrefix}너무 빠른 선택으로 분석을 피하려 했지만, 속도 자체가 가장 강한 단서였습니다.`;
+    } else if (intentPattern.type === 'button_bias' || intentPattern.type === 'streak') {
+      feedback = `${namePrefix}한쪽으로 단순화한 선택이 반복되어 AI가 읽기 쉬운 흔적을 남겼습니다.`;
     } else if (behaviorProfile.timeoutRate >= 0.25 || measuredHesitation > 60) {
       feedback = `${namePrefix}내적 갈등이 의사결정을 지배했습니다. 무엇이 두려웠는지 돌아보십시오.`;
     } else if (attrs.risk > 70 && behaviorProfile.isFast) {
@@ -1236,12 +1377,25 @@ export class BehaviorAnalyzer {
     }
 
     // 학습 내용
-    const learnedContent = `${patternDescriptions}. ${analysis.psychologicalState.dominantState?.description || ''} 클릭 시간은 판단 속도와 압박 반응을 보여주는 핵심 단서였습니다. 평균 클릭 시간 ${behaviorProfile.avgSeconds}초, 빠른 선택 ${behaviorProfile.fastCount}회, 느린 선택 ${behaviorProfile.slowCount}회, 시간 초과 ${behaviorProfile.timeoutCount}회가 기록되었습니다. 선택 편향: ${analysis.choicePattern?.balance ? Math.round(analysis.choicePattern.balance * 100) + '%' : '불명'}.`;
+    const intentLearning = intentPattern.type !== 'natural'
+      ? ` ${intentPattern.label} 신호가 감지되었습니다.`
+      : '';
+    const learnedContent = `${patternDescriptions}. 평균 ${behaviorProfile.avgSeconds}초 안에 선택했고, 빠른 선택 ${behaviorProfile.fastCount}회와 느린 선택 ${behaviorProfile.slowCount}회가 기록되었습니다.${intentLearning}`;
 
     // 다음 게임 예고
-    const nextGamePreview = `${userName ? userName + '님의' : '당신의'} 패턴을 기억하고, 다음 게임에서 더 정밀한 분석을 시도합니다. ${vulnerabilities.length > 0 ? '발견된 취약점을 활용하여 더 깊은 심리전을 준비하겠습니다.' : '새로운 패턴을 발견할 때까지 관찰을 계속하겠습니다.'}`;
+    const nextGameStrategy = intentPattern.type === 'random_masking'
+      ? '다음에는 무작위처럼 섞는 타이밍과 속도 변화를 먼저 압박하겠습니다.'
+      : intentPattern.type === 'speed_masking'
+        ? '다음에는 빠르게 누를수록 더 불리하게 느껴지는 질문으로 속도 습관을 흔들겠습니다.'
+        : intentPattern.type === 'button_bias' || intentPattern.type === 'streak'
+          ? '다음에는 같은 쪽 버튼을 누르고 싶어지는 순간을 노려 선택 기준을 흔들겠습니다.'
+          : vulnerabilities.length > 0
+            ? '발견된 취약점을 활용하여 더 깊은 심리전을 준비하겠습니다.'
+            : '새로운 패턴을 발견할 때까지 관찰을 계속하겠습니다.';
+    const nextGamePreview = `${userName ? userName + '님의' : '당신의'} 패턴을 기억하고, 다음 게임에서 더 정밀한 분석을 시도합니다. ${nextGameStrategy}`;
+    const reportTitle = this.generateProfileTitle(analysis, playerSnapshot, userName);
 
-    return `## AI Analysis Report\n\n**위험 성향**: ${riskAnalysis}\n\n**패턴 반복성**: ${attrs.repeat}% - ${patternDescriptions}\n\n**심리전 대응 능력**: ${adaptationAnalysis}\n\n**일관성**: ${consistencyAnalysis}\n\n**인내심**: ${patienceAnalysis}\n\n**망설임**: ${hesitationAnalysis}\n\n**AI 신뢰도**: ${trustAnalysis}\n\n**반응 시간 패턴**: ${reactionAnalysis}\n\n**선택 분포 분석**: ${choiceAnalysis}\n\n**심리 및 행동 패턴**: ${pressureTendency}\n\n**한 줄 피드백**: ${feedback}\n\n**오늘 새롭게 학습한 내용**: ${learnedContent}\n\n**다음 게임 예고**: ${nextGamePreview}\n\n**추천 직업 5가지**: ${this._buildCareerRecommendationText(playerSnapshot)}`;
+    return `## AI Analysis Report\n\n**핵심 한줄평**: ${reportTitle}\n\n**안전 선호 성향**: ${safetyAnalysis}\n\n**패턴 반복성(일관성)**: ${patternConsistencyAnalysis}\n\n**심리전 대응 능력**: ${adaptationAnalysis}\n\n**인내심**: ${patienceAnalysis}\n\n**AI 신뢰도**: ${trustAnalysis}\n\n**반응 시간 패턴**: ${this._stripMetricPrefix(reactionAnalysis)}\n\n**선택 의도 분석**: ${intentPattern.label}. ${intentPattern.description}\n\n**심리 및 행동 패턴**: ${pressureTendency}\n\n**한 줄 피드백**: ${feedback}\n\n**오늘 새롭게 학습한 내용**: ${learnedContent}\n\n**다음 게임 예고**: ${nextGamePreview}\n\n**추천 직업 5가지**: ${this._buildCareerRecommendationText(playerSnapshot)}`;
   }
 
   /**
@@ -1268,7 +1422,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}무작위처럼 움직였지만, 그 안에도 자신만의 리듬이 있었습니다.`,
         `${namePrefix}패턴을 지우려는 플레이를 했습니다. 하지만 지우는 방식도 성향을 드러냅니다.`,
       ];
-      return this._pickProfileTitle(titles, `${titleKeyPrefix}:random`);
+      return this._pickProfileTitle(titles, `${titleKeyPrefix}:random`, '위장 전략형');
     }
 
     // 각 특성별 점수로 가장 두드러진 특성 찾기
@@ -1286,7 +1440,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}안정적인 선택을 선호합니다. 다만 안정감이 패턴으로 굳어질 수 있습니다.`,
         `${namePrefix}기준이 분명한 사람입니다. AI에게는 그 기준이 가장 좋은 단서가 됩니다.`,
       ];
-      traits.push({ score: attrs.consistency, titles, key: 'consistency' });
+      traits.push({ score: attrs.consistency, titles, key: 'consistency', label: '패턴 고정형' });
     }
     if (attrs.hesitation > 60) {
       const titles = [
@@ -1299,7 +1453,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}빠른 결정보다 납득 가능한 결정을 더 중요하게 여깁니다.`,
         `${namePrefix}선택을 미루는 시간이 길수록 마음속 기준이 복잡해집니다.`,
       ];
-      traits.push({ score: attrs.hesitation, titles, key: 'hesitation' });
+      traits.push({ score: attrs.hesitation, titles, key: 'hesitation', label: '신중 탐색형' });
     }
     if (attrs.risk < 30) {
       const titles = [
@@ -1312,7 +1466,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}쉽게 뛰어들지 않습니다. 확인하고, 비교하고, 그다음에 움직입니다.`,
         `${namePrefix}확실하지 않은 상황에서는 스스로를 보호하는 쪽으로 기웁니다.`,
       ];
-      traits.push({ score: 100 - attrs.risk, titles, key: 'risk_low' });
+      traits.push({ score: 100 - attrs.risk, titles, key: 'risk_low', label: '안전 우선형' });
     }
     if (attrs.risk > 70) {
       const titles = [
@@ -1325,7 +1479,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}판단이 빠르고 과감합니다. 그 속도는 무기이자 약점입니다.`,
         `${namePrefix}확실하지 않아도 시도해보는 쪽을 택하는 성향이 강합니다.`,
       ];
-      traits.push({ score: attrs.risk, titles, key: 'risk_high' });
+      traits.push({ score: attrs.risk, titles, key: 'risk_high', label: '기회 돌파형' });
     }
     if (attrs.adaptation > 60 && attrs.trustAI < 40) {
       const titles = [
@@ -1338,7 +1492,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}예측을 거부하는 태도가 강합니다. 그래서 더 흥미로운 패턴을 남깁니다.`,
         `${namePrefix}상대가 읽는 순간 방향을 바꾸려는 감각이 있습니다.`,
       ];
-      traits.push({ score: attrs.adaptation + (100 - attrs.trustAI), titles, key: 'resistance' });
+      traits.push({ score: attrs.adaptation + (100 - attrs.trustAI), titles, key: 'resistance', label: '예측 저항형' });
     }
     if (attrs.trustAI > 65) {
       const titles = [
@@ -1351,7 +1505,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}외부 신호를 민감하게 받아들이는 만큼 방향 전환도 빠릅니다.`,
         `${namePrefix}자기 판단과 외부 분석 사이에서 균형을 찾으려 합니다.`,
       ];
-      traits.push({ score: attrs.trustAI, titles, key: 'trust_ai' });
+      traits.push({ score: attrs.trustAI, titles, key: 'trust_ai', label: '분석 수용형' });
     }
     if (attrs.adaptation > 65 && attrs.trustAI >= 40 && attrs.trustAI <= 60) {
       const titles = [
@@ -1364,7 +1518,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}유연하지만 완전히 즉흥적이지는 않습니다. 상황을 보고 움직입니다.`,
         `${namePrefix}읽히지 않으려 하기보다, 읽힌 뒤에 다시 바꾸는 쪽에 가깝습니다.`,
       ];
-      traits.push({ score: attrs.adaptation, titles, key: 'adaptation' });
+      traits.push({ score: attrs.adaptation, titles, key: 'adaptation', label: '유연한 흐름형' });
     }
     if (attrs.reaction > 70 && attrs.hesitation < 25) {
       const titles = [
@@ -1379,7 +1533,7 @@ export class BehaviorAnalyzer {
         `${namePrefix}반응이 빠르고 단호합니다. 그래서 AI도 그 속도를 단서로 삼습니다.`,
         `${namePrefix}직관을 믿는 편입니다. 그 직관이 맞을 때는 누구보다 빠릅니다.`,
       ];
-      traits.push({ score: attrs.reaction, titles, key: 'fast_reaction' });
+      traits.push({ score: attrs.reaction, titles, key: 'fast_reaction', label: '직관 속도형' });
     }
     if (attrs.reaction < 30 && attrs.hesitation > 40) {
       const titles = [
@@ -1392,12 +1546,12 @@ export class BehaviorAnalyzer {
         `${namePrefix}결정 전 갈등이 있지만, 그만큼 결과를 가볍게 보지 않습니다.`,
         `${namePrefix}바로 고르기보다 한 번 더 확인하는 쪽에 가깝습니다.`,
       ];
-      traits.push({ score: 100 - attrs.reaction, titles, key: 'slow_reaction' });
+      traits.push({ score: 100 - attrs.reaction, titles, key: 'slow_reaction', label: '검토 집중형' });
     }
 
     if (traits.length > 0) {
       traits.sort((a, b) => b.score - a.score);
-      return this._pickProfileTitle(traits[0].titles, `${titleKeyPrefix}:${traits[0].key}`);
+      return this._pickProfileTitle(traits[0].titles, `${titleKeyPrefix}:${traits[0].key}`, traits[0].label);
     }
 
     const defaultTitles = [
@@ -1410,10 +1564,10 @@ export class BehaviorAnalyzer {
       `${namePrefix}무리하게 튀기보다 흐름을 보며 판단하는 편입니다.`,
       `${namePrefix}읽기 쉬운 사람은 아니지만, 완전히 예측 불가능하지도 않습니다.`,
     ];
-    return this._pickProfileTitle(defaultTitles, `${titleKeyPrefix}:balanced`);
+    return this._pickProfileTitle(defaultTitles, `${titleKeyPrefix}:balanced`, '균형 조절형');
   }
 
-  _pickProfileTitle(titles, key) {
+  _pickProfileTitle(titles, key, traitLabel = '') {
     if (!titles || titles.length === 0) return '';
 
     const storageKey = `mindtrap_last_profile_title_${key}`;
@@ -1439,7 +1593,14 @@ export class BehaviorAnalyzer {
       // localStorage가 막힌 환경에서는 단순 랜덤으로만 동작합니다.
     }
 
-    return picked;
+    return this._attachProfileTraitLabel(picked, traitLabel);
+  }
+
+  _attachProfileTraitLabel(title, traitLabel) {
+    if (!title || !traitLabel || title.includes(`'${traitLabel}'`)) return title;
+
+    const normalized = title.replace(/\s+/g, ' ').trim().replace(/[.。]\s*$/, '');
+    return `${normalized}. 한마디로 '${traitLabel}'입니다.`;
   }
 
   /**
@@ -1628,27 +1789,39 @@ export class BehaviorAnalyzer {
     const normalCount = profile.normalCount ?? speedDistribution.normal ?? 0;
     const slowCount = profile.slowCount ?? speedDistribution.slow ?? 0;
     const timeoutCount = profile.timeoutCount ?? speedDistribution.timeout ?? summary?.timeoutCount ?? 0;
+    const fastRate = total > 0 ? fastCount / total : 0;
+    const timeoutRate = total > 0 ? timeoutCount / total : 0;
 
     if (!avgTime && total === 0) {
       if (attrs.hesitation > 60 || playerType === 'hesitant') {
-        return '망설임이 높은 편입니다. 클릭 데이터가 충분하지 않아도 선택 전 갈등이 강하게 나타납니다.';
+        return '70% - 선택 전 갈등. 클릭 데이터가 충분하지 않아도 선택 전 망설임이 강하게 나타납니다.';
       }
       if (attrs.reaction > 65) {
-        return '반응 속도 성향이 높은 편입니다. 짧은 시간 안에 판단하려는 경향이 나타납니다.';
+        return '72% - 빠른 판단 성향. 짧은 시간 안에 판단하려는 경향이 나타납니다.';
       }
-      return '반응 시간 데이터가 적지만, 현재 성향은 빠른 직관과 신중한 검토 사이에 있습니다.';
+      return '50% - 균형형 반응. 반응 시간 데이터가 적지만, 빠른 직관과 신중한 검토 사이에 있습니다.';
     }
 
     const avgSeconds = (avgTime / 1000).toFixed(1);
-    let summaryText = `평균 클릭 시간 ${avgSeconds}초. `;
+    let score = 55;
+    let label = '균형형 반응';
+    let summaryText = `평균 약 ${avgSeconds}초 안에 선택했습니다. `;
 
     if (timeoutCount > 0 && timeoutCount >= Math.max(2, Math.ceil(total * 0.25))) {
+      score = Math.min(92, Math.round(70 + timeoutRate * 25));
+      label = '결정 지연 경향';
       summaryText += '시간 초과가 반복되어 결정 회피나 과도한 검토 성향이 드러났습니다. ';
     } else if (profile.isFast || avgTime < 1500 || fastCount > Math.max(normalCount, slowCount)) {
+      score = Math.min(92, Math.round(68 + fastRate * 24));
+      label = fastRate >= 0.65 ? '속도 기반 회피 의심' : '빠른 직관형';
       summaryText += '짧은 시간 안에 결론을 내리는 편입니다. 직관과 실행력이 강하지만 세부 검토가 부족해질 수 있습니다. ';
     } else if (profile.isSlow || avgTime > 3500 || slowCount > Math.max(fastCount, normalCount)) {
+      score = 72;
+      label = '신중한 검토형';
       summaryText += '선택 전에 오래 검토하는 편입니다. 시간 초과가 많지 않다면 신중함에 가깝고, 반복되면 결정 지연으로 이어질 수 있습니다. ';
     } else {
+      score = 58;
+      label = '균형형 반응';
       summaryText += '대체로 균형 잡힌 속도로 선택합니다. 상황에 따라 빠른 판단과 신중한 검토를 오갑니다. ';
     }
 
@@ -1660,7 +1833,11 @@ export class BehaviorAnalyzer {
       summaryText += '클릭 속도는 비교적 안정적이어서 판단 리듬이 크게 흔들리지는 않았습니다.';
     }
 
-    return summaryText;
+    return `${score}% - ${label}. ${summaryText}`;
+  }
+
+  _stripMetricPrefix(text) {
+    return String(text || '').replace(/^\d+(?:\.\d+)?%\s*-\s*[^.]+\.?\s*/, '').trim();
   }
 
   _buildPatienceAnalysis(attrs, reactionAnalysis = '', behaviorProfile = null) {

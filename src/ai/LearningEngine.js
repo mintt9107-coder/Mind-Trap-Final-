@@ -66,10 +66,16 @@ export class LearningEngine {
     this.playerModel.updateLearningProgress(round, totalRounds);
 
     // 4. 선택 기록
-    this.playerModel.recordChoice(roundData.choice, {
+    const recordedChoice = roundData.timeOut ? 'timeout' : roundData.choice;
+    this.playerModel.recordChoice(recordedChoice, {
       reactionTime: roundData.reactionTime,
       questionType: roundData.question.type,
+      choiceText: roundData.timeOut
+        ? '시간 초과'
+        : roundData.question.choices?.[roundData.choice] || roundData.choice,
+      questionPrompt: roundData.question.prompt,
       timeOut: Boolean(roundData.timeOut),
+      actualChoice: roundData.choice,
     });
 
     // 5. 자신감 업데이트 (데이터가 많을수록 자신감 증가)

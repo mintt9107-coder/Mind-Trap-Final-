@@ -40,34 +40,36 @@ export class FeatureExtractor {
       timeOut,
     } = roundData;
 
+    const effectiveChoice = timeOut ? 'timeout' : choice;
+
     const features = {
       round,
       timestamp: Date.now(),
 
       // 기본 행동 특징
       reactionTime,
-      choice,
+      choice: effectiveChoice,
       changedChoice: changedChoice ? 1 : 0,
       timeOut: timeOut ? 1 : 0,
 
       // 파생 특징들
       hesitationTime: this._calculateHesitationTime(reactionTime, timeOut),
-      riskChoice: this._evaluateRiskChoice(question, choice),
-      repeatChoice: this._evaluateRepeatChoice(choice),
+      riskChoice: timeOut ? 50 : this._evaluateRiskChoice(question, choice),
+      repeatChoice: this._evaluateRepeatChoice(effectiveChoice),
       speedCategory: this._categorizeSpeed(reactionTime, timeOut),
 
       // 문맥 기반 특징
-      consistencyScore: this._calculateConsistency(choice),
-      adaptationScore: this._calculateAdaptation(choice, question.type),
+      consistencyScore: this._calculateConsistency(effectiveChoice),
+      adaptationScore: this._calculateAdaptation(effectiveChoice, question.type),
       patienceScore: timeOut ? 0 : this._calculatePatience(reactionTime),
 
       // 메타 특징
       questionType: question.type,
-      choiceValue: this._getChoiceValue(question, choice),
+      choiceValue: timeOut ? '시간 초과' : this._getChoiceValue(question, choice),
     };
 
     // 기록 저장
-    this.previousChoices.push(choice);
+    this.previousChoices.push(effectiveChoice);
     this.previousReactionTimes.push(reactionTime);
 
     // 최근 5개만 유지
@@ -125,9 +127,13 @@ export class FeatureExtractor {
    * @private
    */
   _evaluateRepeatChoice(choice) {
+    if (choice === 'timeout') return 0;
     if (this.previousChoices.length === 0) return 0;
 
-    const lastChoice = this.previousChoices[this.previousChoices.length - 1];
+    const lastChoice = [...this.previousChoices]
+      .reverse()
+      .find((previousChoice) => previousChoice !== 'timeout');
+    if (!lastChoice) return 0;
     return lastChoice === choice ? 100 : 0;
   }
 
@@ -152,12 +158,15 @@ export class FeatureExtractor {
    * @private
    */
   _calculateConsistency(currentChoice) {
-    if (this.previousChoices.length < 2) return 50;
+    if (currentChoice === 'timeout') return 50;
 
-    const sameCount = this.previousChoices.filter(
+    const validPreviousChoices = this.previousChoices.filter((choice) => choice !== 'timeout');
+    if (validPreviousChoices.length < 2) return 50;
+
+    const sameCount = validPreviousChoices.filter(
       (c) => c === currentChoice
     ).length;
-    const ratio = sameCount / this.previousChoices.length;
+    const ratio = sameCount / validPreviousChoices.length;
 
     return Math.round(ratio * 100);
   }
@@ -170,10 +179,15 @@ export class FeatureExtractor {
    * @private
    */
   _calculateAdaptation(choice, questionType) {
+    if (choice === 'timeout') return 50;
+
     // 간단히 직전 선택과 다른지 확인
     if (this.previousChoices.length === 0) return 50;
 
-    const lastChoice = this.previousChoices[this.previousChoices.length - 1];
+    const lastChoice = [...this.previousChoices]
+      .reverse()
+      .find((previousChoice) => previousChoice !== 'timeout');
+    if (!lastChoice) return 50;
     return choice !== lastChoice ? 70 : 30;
   }
 
@@ -197,7 +211,7 @@ export class FeatureExtractor {
    * @private
    */
   _getChoiceValue(question, choice) {
-    return question.choices[choice] || choice;
+    return question.choices?.[choice] || choice;
   }
 
   /**

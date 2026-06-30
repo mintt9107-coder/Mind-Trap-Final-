@@ -24,14 +24,19 @@ export const createLandingScreen = ({
 }) => {
   const buildMemoryText = (summary, name = '') => {
     const playerName = name ? `${name}님` : '당신';
+    const savedNameCount = summary?.nameSaveCount || 0;
     if (summary && summary.hasMemory) {
-      const analysisNumber = (summary.totalGames || 0) + 1;
+      const analysisNumber = Math.max((summary.totalGames || 0) + 1, savedNameCount);
       return `이번은 ${analysisNumber}번째 분석입니다. 제가 ${playerName}을 다시 분석해보겠습니다. 도전하시겠습니까?`;
     }
 
+    if (name && savedNameCount > 1) {
+      return `이번은 ${savedNameCount}번째 분석입니다. 제가 ${playerName}을 다시 분석해보겠습니다. 도전하시겠습니까?`;
+    }
+
     return name
-      ? `처음 오셨군요, 제가 ${playerName}을 분석해보겠습니다. 도전하시겠습니까?`
-      : '처음 오셨군요, 제가 당신을 분석해보겠습니다. 도전하시겠습니까?';
+      ? `처음 뵙겠습니다. 제가 ${playerName}을 처음 분석해보겠습니다. 도전하시겠습니까?`
+      : '처음 뵙겠습니다. 제가 당신을 처음 분석해보겠습니다. 도전하시겠습니까?';
   };
 
   const screen = createElement('div', {

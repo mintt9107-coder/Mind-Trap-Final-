@@ -24,6 +24,65 @@ const parseAiReport = (report) => {
     nextGame: '',
   };
 
+  const reportKeys = [
+    '핵심 한줄평',
+    '안전 선호 성향',
+    '패턴 반복성(일관성)',
+    '심리전 대응 능력',
+    '인내심',
+    'AI 신뢰도',
+    '반응 시간 패턴',
+    '선택 의도 분석',
+    '심리 및 행동 패턴',
+    '한 줄 피드백',
+    '오늘 새롭게 학습한 내용',
+    '다음 게임 예고',
+    '추천 직업 5가지',
+  ];
+
+  const normalizePercent = (value, key, sections = []) => {
+    const percentMatch = value.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (percentMatch) return parseFloat(percentMatch[1]);
+
+    if (/높음|강함|우수|탁월/.test(value)) return 85;
+    if (/보통|중간|평균/.test(value)) return 55;
+    if (/낮음|약함|부족/.test(value)) return 25;
+
+    if (key.includes('반응 시간')) {
+      const avgMatch = value.match(/평균\s*(\d+(?:\.\d+)?)\s*ms/i);
+      if (avgMatch) {
+        const avg = parseFloat(avgMatch[1]);
+        if (avg <= 1200) return 90;
+        if (avg <= 2000) return 70;
+        if (avg <= 3500) return 45;
+        return 25;
+      }
+    }
+
+    if (key.includes('심리 및 행동 패턴')) {
+      const metricSections = sections.filter((s) => typeof s.percent === 'number');
+      if (metricSections.length > 0) {
+        const total = metricSections.reduce((sum, section) => sum + section.percent, 0);
+        return Math.round(total / metricSections.length);
+      }
+    }
+
+    return null;
+  };
+
+  const addSection = (key, rawValue) => {
+    const value = rawValue
+      .replace(/^[:：]\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!value) return;
+
+    const percent = normalizePercent(value, key, result.sections);
+    result.sections.push({ key, value, percent });
+  };
+
+  const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   // "## AI Analysis Report" 헤더 제거
   const cleaned = report
     .replace(/^##\s*AI Analysis Report\s*/i, '')
@@ -35,17 +94,34 @@ const parseAiReport = (report) => {
     );
 
   // 항목별 파싱: **항목**: 내용 (여러 줄 내용 포함)
-  const itemRegex = /\*\*([^*]+)\*\*\s*:\s*([\s\S]*?)(?=\n\s*\*\*[^*]+\*\*\s*:|$)/g;
+  const itemRegex = /\*\*([^*]+)\*\*\s*:\s*([\s\S]*?)(?=\s*\*\*[^*]+\*\*\s*:|$)/g;
   let match;
   while ((match = itemRegex.exec(cleaned)) !== null) {
-    const key = match[1].trim();
-    const value = match[2].trim();
+    addSection(match[1].trim(), match[2].trim());
+  }
 
-    // 퍼센트 추출 시도
-    const percentMatch = value.match(/(\d+(?:\.\d+)?)\s*%/);
-    const percent = percentMatch ? parseFloat(percentMatch[1]) : null;
+  if (result.sections.length === 0) {
+    const plain = cleaned
+      .replace(/\*\*/g, '')
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-    result.sections.push({ key, value, percent });
+    const positions = reportKeys
+      .map((key) => {
+        const regex = new RegExp(`${escapeRegExp(key)}\\s*[:：]`, 'i');
+        const found = regex.exec(plain);
+        return found ? { key, index: found.index, length: found[0].length } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.index - b.index);
+
+    positions.forEach((position, index) => {
+      const next = positions[index + 1];
+      const valueStart = position.index + position.length;
+      const valueEnd = next ? next.index : plain.length;
+      addSection(position.key, plain.slice(valueStart, valueEnd));
+    });
   }
 
   // 한 줄 피드백, 학습 내용, 다음 게임 예고
@@ -110,6 +186,42 @@ const cleanAnalysisDetail = (text, percent) => {
     .trim();
 };
 
+const simplifyReactionTimeText = (text) => {
+  if (!text) return '';
+
+  return text
+    .replace(/평균\s*(\d+(?:\.\d+)?)\s*ms\s*의\s*빠른\s*클릭\s*속도/g, (_, ms) => {
+      const seconds = (Number(ms) / 1000).toFixed(1);
+      return `평균 약 ${seconds}초 안에 선택한 편`;
+    })
+    .replace(/평균\s*(\d+(?:\.\d+)?)\s*ms\s*의\s*느린\s*클릭\s*속도/g, (_, ms) => {
+      const seconds = (Number(ms) / 1000).toFixed(1);
+      return `평균 약 ${seconds}초 동안 고민한 편`;
+    })
+    .replace(/평균\s*(\d+(?:\.\d+)?)\s*ms/g, (_, ms) => {
+      const seconds = (Number(ms) / 1000).toFixed(1);
+      return `평균 약 ${seconds}초`;
+    })
+    .replace(/빠른 클릭 속도/g, '비교적 빠른 선택 속도')
+    .replace(/느린 클릭 속도/g, '비교적 신중한 선택 속도');
+};
+
+const getShareUrl = () => {
+  if (typeof window === 'undefined') return 'https://mindtrap.ai';
+
+  const configuredUrl = window.MINDTRAP_CONFIG?.appUrl
+    || window.MINDTRAP_CONFIG?.APP_URL
+    || '';
+  if (configuredUrl) return configuredUrl;
+
+  const { origin } = window.location;
+  if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+    return origin;
+  }
+
+  return 'https://mindtrap.ai';
+};
+
 /**
  * 분석 항목을 그래프 바 + 퍼센트로 렌더링
  * @param {Object} section - { key, value, percent }
@@ -119,21 +231,43 @@ const createAnalysisGraphItem = (section) => {
   const item = createElement('div', {
     className: 'analysis-item',
   });
-  const shouldShowBar = section.percent !== null && !section.key.includes('오늘 새롭게 학습한 내용');
+  const barSectionKeys = [
+    '안전 선호 성향',
+    '패턴 반복성(일관성)',
+    '심리전 대응 능력',
+    '인내심',
+    'AI 신뢰도',
+  ];
+  const isJobRecommendation = section.key.includes('추천 직업');
+  const isCoreSummary = section.key.includes('핵심 한줄평');
+  const shouldShowBar = barSectionKeys.includes(section.key)
+    && section.percent !== null
+    && !isJobRecommendation;
 
   // 라벨 행 (항목명 + 퍼센트)
   const labelRow = createElement('div', {
     className: 'analysis-item__label-row',
   });
 
-  const label = createElement('span', {
-    className: 'analysis-item__label',
-    textContent: section.key,
-  });
+  if (!isCoreSummary) {
+    const label = createElement('span', {
+      className: 'analysis-item__label',
+      textContent: section.key,
+    });
 
-  labelRow.appendChild(label);
+    labelRow.appendChild(label);
+  }
 
-  item.appendChild(labelRow);
+  if (shouldShowBar && section.percent !== null && !Number.isNaN(section.percent)) {
+    labelRow.appendChild(createElement('span', {
+      className: 'analysis-item__percent',
+      textContent: `${Math.round(section.percent)}%`,
+    }));
+  }
+
+  if (!isCoreSummary) {
+    item.appendChild(labelRow);
+  }
 
   // 그래프 바 (퍼센트가 있는 경우)
   if (shouldShowBar) {
@@ -162,9 +296,30 @@ const createAnalysisGraphItem = (section) => {
     className: 'analysis-item__desc',
   });
 
-  const value = section.value.replace(/\s+/g, ' ').trim();
+  const value = section.key.includes('반응 시간')
+    ? simplifyReactionTimeText(section.value.replace(/\s+/g, ' ').trim())
+    : section.value.replace(/\s+/g, ' ').trim();
   if (section.key.includes('추천 직업')) {
     appendJobRecommendations(desc, section.value);
+    item.appendChild(desc);
+    return item;
+  }
+
+  if (isCoreSummary) {
+    item.classList.add('analysis-item--core-summary');
+    desc.appendChild(createElement('p', {
+      className: 'analysis-item__core-quote',
+      textContent: `"${cleanAnalysisDetail(value, section.percent)}"`,
+    }));
+    item.appendChild(desc);
+    return item;
+  }
+
+  if (section.key.includes('한 줄 피드백')) {
+    desc.appendChild(createElement('strong', {
+      className: 'analysis-item__highlight',
+      textContent: cleanAnalysisDetail(value, section.percent),
+    }));
     item.appendChild(desc);
     return item;
   }
@@ -415,7 +570,8 @@ export const createResultScreen = ({ gameEngine, onRestart, onBackToMenu }) => {
       return;
     }
 
-    // 각 섹션을 그래프 아이템으로 렌더링
+    analysisTitle.textContent = '🤖 AI Analysis Report';
+
     parsed.sections
       .filter((section) => !['플레이어 타입', '선택 변화 시점', 'AI를 가장 많이 속인 순간'].includes(section.key))
       .forEach((section) => {
@@ -457,7 +613,8 @@ export const createResultScreen = ({ gameEngine, onRestart, onBackToMenu }) => {
    * @param {string} titleText - 프로필 제목
    */
   const setProfileTitle = (titleText) => {
-    profileTitle.textContent = titleText;
+    profileTitle.textContent = '';
+    profileTitle.style.display = 'none';
   };
 
   /**
@@ -493,7 +650,7 @@ export const createResultScreen = ({ gameEngine, onRestart, onBackToMenu }) => {
       saveProfileBtn.textContent = '저장 중...';
       saveProfileBtn.disabled = true;
 
-      const canvas = await html2canvas(resultContainer, {
+      const canvas = await html2canvas(analysisSection, {
         backgroundColor: '#070711',
         scale: Math.min(2, window.devicePixelRatio || 1),
         useCORS: true,
@@ -522,7 +679,7 @@ export const createResultScreen = ({ gameEngine, onRestart, onBackToMenu }) => {
    * @private
    */
   const _shareProfile = async () => {
-    if (!playerProfile) {
+    if (!aiReport && !playerProfile) {
       alert('아직 프로필이 생성되지 않았습니다.');
       return;
     }
@@ -568,41 +725,44 @@ export const createResultScreen = ({ gameEngine, onRestart, onBackToMenu }) => {
    * @private
    */
   const _buildShareText = () => {
-    if (!playerProfile) return '';
+    if (!aiReport && !playerProfile) return '';
 
     const lines = [];
     lines.push('🧠 MindTrap - AI 행동 분석 프로필');
     lines.push('');
-    lines.push(`"${playerProfile.title}"`);
-    lines.push('');
-    lines.push(`분석 대상: ${playerProfile.userName}`);
-    lines.push(`플레이어 타입: ${playerProfile.playerType}`);
-    lines.push(`AI 예측 성공률: ${playerProfile.predictionAccuracy}%`);
-    lines.push('');
 
-    if (playerProfile.traits && playerProfile.traits.length > 0) {
-      lines.push('주요 특성:');
-      playerProfile.traits.forEach((t) => lines.push(`  • ${t}`));
+    const parsed = parseAiReport(aiReport || '');
+    if (parsed && parsed.sections.length > 0) {
+      lines.push('AI Analysis Report');
+      lines.push('');
+
+      parsed.sections
+        .filter((section) => !['플레이어 타입', '선택 변화 시점', 'AI를 가장 많이 속인 순간'].includes(section.key))
+        .forEach((section) => {
+          const value = section.key.includes('반응 시간')
+            ? simplifyReactionTimeText(section.value.replace(/\s+/g, ' ').trim())
+            : section.value.replace(/\s+/g, ' ').trim();
+
+          if (section.key.includes('핵심 한줄평')) {
+            lines.push(`"${cleanAnalysisDetail(value, section.percent)}"`);
+            lines.push('');
+            return;
+          }
+
+          lines.push(`${section.key}: ${cleanAnalysisDetail(value, section.percent)}`);
+          lines.push('');
+        });
+    } else if (playerProfile) {
+      lines.push(`"${playerProfile.title}"`);
+      lines.push('');
+      lines.push(`분석 대상: ${playerProfile.userName}`);
+      lines.push(`플레이어 타입: ${playerProfile.playerType}`);
+      lines.push(`AI 예측 성공률: ${playerProfile.predictionAccuracy}%`);
       lines.push('');
     }
 
-    if (playerProfile.randomClickingDetected) {
-      lines.push('⚠️ 패턴 숨기기 시도 감지됨');
-      lines.push('');
-    }
-
-    const attrs = playerProfile.attributes;
-    if (attrs) {
-      lines.push('행동 지표:');
-      lines.push(`  위험 성향: ${attrs.risk}%`);
-      lines.push(`  일관성: ${attrs.consistency}%`);
-      lines.push(`  망설임: ${attrs.hesitation}%`);
-      lines.push(`  적응력: ${attrs.adaptation}%`);
-      lines.push(`  AI 신뢰도: ${attrs.trustAI}%`);
-    }
-
-    lines.push('');
     lines.push('MindTrap에서 나를 분석해보세요.');
+    lines.push(getShareUrl());
 
     return lines.join('\n');
   };

@@ -31,6 +31,11 @@ export class PromptBuilder {
     this.systemPrompt = this._getDefaultSystemPrompt();
   }
 
+  _getChoiceText(question, choice) {
+    if (!question || !choice) return choice || '선택 없음';
+    return question.choices?.[choice] || choice;
+  }
+
   /**
    * 기본 시스템 프롬프트 반환
    * @returns {string} 시스템 프롬프트
@@ -274,10 +279,17 @@ export class PromptBuilder {
    */
   buildPredictionSuccessPrompt({ prediction, actualChoice, roundData }) {
     const parts = [];
+    const question = roundData?.question;
+    const actualText = this._getChoiceText(question, actualChoice);
+    const predictedText = this._getChoiceText(question, prediction.prediction);
 
     parts.push('[Prediction]');
-    parts.push(`예측: ${prediction.prediction}`);
-    parts.push(`실제: ${actualChoice}`);
+    if (question) {
+      parts.push(`질문 유형: ${question.type}`);
+      parts.push(`질문: ${question.prompt}`);
+    }
+    parts.push(`AI 예측: ${prediction.prediction} (${predictedText})`);
+    parts.push(`유저 선택: ${actualChoice} (${actualText})`);
     parts.push('결과: 성공');
     parts.push('');
 
@@ -288,14 +300,20 @@ export class PromptBuilder {
       }
       parts.push(`선택 변경: ${roundData.changedChoice ? '예' : '아니오'}`);
       parts.push(`시간 초과: ${roundData.timeOut ? '예' : '아니오'}`);
+      if (roundData.firstChoice) {
+        parts.push(`첫 선택: ${this._getChoiceText(question, roundData.firstChoice)}`);
+        parts.push(`최종 선택: ${actualText}`);
+      }
       parts.push('');
     }
 
     parts.push('[Today\'s Goal]');
-    parts.push('예측이 맞았음을 담담하게 인정하며, 플레이어가 예측 가능하다는 점을 은은하게 압박하세요.');
-    parts.push('"예상대로입니다"에 이어, 플레이어의 일관성을 지적하세요.');
+    parts.push('유저가 실제로 고른 선택지 문구를 반드시 자연스럽게 언급하세요.');
+    parts.push('예측이 맞았음을 담담하게 인정하되, 유저의 선택이 왜 읽혔는지 심리를 자극하세요.');
+    parts.push('질문 주제와 연결해서 "그 선택은 안전 욕구/위험 선호/통제 욕구/직관 의존/AI 경계심" 중 관찰 가능한 한 가지로 해석하세요.');
     parts.push('반응 시간이나 선택 변경 여부를 심리전에 활용하세요.');
-    parts.push('1-2문장으로 작성하세요.');
+    parts.push('기계적인 분석문이 아니라 게임 속 AI가 바로 옆에서 도발하는 말투로 쓰세요.');
+    parts.push('1-2문장, 120자 이내로 작성하세요.');
 
     return [
       { role: 'system', content: this.systemPrompt },
@@ -313,10 +331,17 @@ export class PromptBuilder {
    */
   buildPredictionFailurePrompt({ prediction, actualChoice, roundData }) {
     const parts = [];
+    const question = roundData?.question;
+    const actualText = this._getChoiceText(question, actualChoice);
+    const predictedText = this._getChoiceText(question, prediction.prediction);
 
     parts.push('[Prediction]');
-    parts.push(`예측: ${prediction.prediction}`);
-    parts.push(`실제: ${actualChoice}`);
+    if (question) {
+      parts.push(`질문 유형: ${question.type}`);
+      parts.push(`질문: ${question.prompt}`);
+    }
+    parts.push(`AI 예측: ${prediction.prediction} (${predictedText})`);
+    parts.push(`유저 선택: ${actualChoice} (${actualText})`);
     parts.push('결과: 실패');
     parts.push('');
 
@@ -327,14 +352,20 @@ export class PromptBuilder {
       }
       parts.push(`선택 변경: ${roundData.changedChoice ? '예' : '아니오'}`);
       parts.push(`시간 초과: ${roundData.timeOut ? '예' : '아니오'}`);
+      if (roundData.firstChoice) {
+        parts.push(`첫 선택: ${this._getChoiceText(question, roundData.firstChoice)}`);
+        parts.push(`최종 선택: ${actualText}`);
+      }
       parts.push('');
     }
 
     parts.push('[Today\'s Goal]');
-    parts.push('예측이 틀렸음을 인정하고 흥미를 표현하며, 새 가설을 제시하세요.');
-    parts.push('플레이어가 AI를 속이려 했는지, 진심인지 분석하는 말을 하세요.');
+    parts.push('유저가 실제로 고른 선택지 문구를 반드시 자연스럽게 언급하세요.');
+    parts.push('예측이 틀렸음을 짧게 인정한 뒤, 그 선택이 의도적인 교란인지 본심인지 찔러보세요.');
+    parts.push('질문 주제와 연결해서 유저의 심리를 자극하거나 다음 선택을 흔드는 도발을 하세요.');
     parts.push('반응 시간이나 선택 변경을 단서로 활용하세요.');
-    parts.push('1-2문장으로 작성하세요.');
+    parts.push('기계적인 분석문이 아니라 게임 속 AI가 바로 옆에서 도발하는 말투로 쓰세요.');
+    parts.push('1-2문장, 120자 이내로 작성하세요.');
 
     return [
       { role: 'system', content: this.systemPrompt },
@@ -351,6 +382,8 @@ export class PromptBuilder {
    */
   buildChoiceReactionPrompt({ playerModel, roundData }) {
     const parts = [];
+    const question = roundData?.question;
+    const choiceText = this._getChoiceText(question, roundData.choice);
 
     parts.push('[Player Profile]');
     parts.push(`위험 성향: ${this._getLevel(playerModel.attributes.risk)}`);
@@ -361,7 +394,11 @@ export class PromptBuilder {
 
     parts.push('[Choice Detail]');
     parts.push(`라운드: ${roundData.round}`);
-    parts.push(`선택: ${roundData.choice}`);
+    if (question) {
+      parts.push(`질문 유형: ${question.type}`);
+      parts.push(`질문: ${question.prompt}`);
+    }
+    parts.push(`선택: ${roundData.choice} (${choiceText})`);
     if (roundData.reactionTime > 0) {
       parts.push(`반응 시간: ${roundData.reactionTime}ms`);
     }
@@ -370,11 +407,12 @@ export class PromptBuilder {
     parts.push('');
 
     parts.push('[Today\'s Goal]');
-    parts.push('플레이어의 선택에 대한 즉각적인 심리전 대사를 생성하세요.');
-    parts.push('사람이 말하듯 자연스럽게, 유저가 다음 선택을 고민하게 만드는 심리전 대사로 작성하세요.');
-    parts.push('반응 시간이 빠르면 "직관적이군요", 느리면 "신중하군요" 같은 단서를 활용하세요.');
+    parts.push('유저가 실제로 고른 선택지 문구를 반드시 자연스럽게 언급하세요.');
+    parts.push('그 선택의 심리적 의미를 한 가지로 찌르세요: 위험 선호, 안전 욕구, 통제 욕구, 직관 의존, AI 경계심, 회피, 충동 중에서 선택하세요.');
+    parts.push('사람이 말하듯 자연스럽게, 다음 선택을 흔드는 심리전 대사로 작성하세요.');
+    parts.push('반응 시간이 빠르면 본능/충동/확신을, 느리면 갈등/계산/두려움을 단서로 활용하세요.');
     parts.push('시간 초과인 경우, 갈등이나 주저함을 지적하세요.');
-    parts.push('1-2문장으로 작성하세요.');
+    parts.push('1-2문장, 120자 이내로 작성하세요.');
 
     return [
       { role: 'system', content: this.systemPrompt },
@@ -494,7 +532,7 @@ export class PromptBuilder {
     parts.push('');
     parts.push('**반응 시간 패턴**: [평균 클릭 시간과 빠름/느림/시간초과를 근거로 한 유저 성향 분석]');
     parts.push('');
-    parts.push('**심리 및 행동 패턴**: [심리적 취약점과 압박 요소를 하나로 합친 짧은 유저 성향 분석. 게임 자체 평가 금지]');
+    parts.push('**심리 및 행동 패턴**: [수치]% - [심리적 취약점과 압박 요소를 하나로 합친 짧은 유저 성향 분석. 게임 자체 평가 금지]');
     parts.push('');
     parts.push('**한 줄 피드백**: [피드백]');
     parts.push('');
@@ -508,6 +546,7 @@ export class PromptBuilder {
     parts.push('모든 항목은 한국어로 작성하세요.');
     parts.push('선택 분포를 말할 때 primary/secondary 같은 영어 단어를 쓰지 말고 "첫 번째 선택지", "두 번째 선택지"라고 쓰세요.');
     parts.push('퍼센트는 각 항목 맨 앞에 한 번만 쓰고, 설명 문장 안에서 같은 퍼센트를 반복하지 마세요.');
+    parts.push('위험 성향, 패턴 반복성, 심리전 대응 능력, 심리 및 행동 패턴에는 반드시 0-100% 수치를 포함하세요.');
     parts.push('심리적 취약점과 심리적 압박 요소를 별도 항목으로 나누지 마세요.');
     parts.push('게임에 대한 평가보다 유저의 심리, 의사결정 성향, 행동 패턴에 초점을 맞추세요.');
     parts.push('유저의 클릭 시간과 선택 속도 해석을 리포트에 자연스럽게 반영하세요.');

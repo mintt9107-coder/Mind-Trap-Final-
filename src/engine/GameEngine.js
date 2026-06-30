@@ -238,6 +238,8 @@ export class GameEngine {
         this._emit(GAME_EVENTS.TWO_STAGE, {
           round: currentRound.roundNumber,
           aiMessage: twoStageData.aiMessage,
+          prompt: twoStageData.prompt,
+          mode: twoStageData.mode,
           choices: twoStageData.choices,
         });
 

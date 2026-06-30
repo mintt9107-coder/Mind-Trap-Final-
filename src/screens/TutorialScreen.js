@@ -11,11 +11,10 @@ import { GAME_CONFIG } from '../utils/constants.js';
 /**
  * TutorialScreen 생성
  * @param {Object} options - 튜토리얼 화면 옵션
- * @param {Function} options.onStartGame - 게임 시작 콜백
  * @param {Function} options.onBack - 뒤로가기 콜백
  * @returns {Object} 튜토리얼 화면 객체 {element, show, hide}
  */
-export const createTutorialScreen = ({ onStartGame, onBack }) => {
+export const createTutorialScreen = ({ onBack }) => {
   const screen = createElement('div', {
     className: 'screen tutorial-screen',
     id: 'tutorial-screen',
@@ -75,21 +74,13 @@ export const createTutorialScreen = ({ onStartGame, onBack }) => {
     className: 'tutorial__buttons',
   });
 
-  const startBtn = createButton({
-    text: '게임 시작',
-    variant: 'primary',
-    size: 'large',
-    onClick: onStartGame,
-  });
-
   const backBtn = createButton({
     text: '뒤로가기',
-    variant: 'ghost',
-    size: 'medium',
+    variant: 'primary',
+    size: 'large',
     onClick: onBack,
   });
 
-  buttonSection.appendChild(startBtn);
   buttonSection.appendChild(backBtn);
 
   tutorialContainer.appendChild(title);

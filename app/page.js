@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 
 function getRuntimeConfig() {
   return {
+    APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+    appUrl: process.env.NEXT_PUBLIC_APP_URL || '',
     OPENROUTER_API_KEY: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || '',
     openRouter: {
       apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || '',

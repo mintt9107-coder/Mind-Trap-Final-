@@ -21,6 +21,9 @@ export class Memory {
     /** @type {string} 유저 이름 스토리지 키 */
     this.userNameKey = 'mindtrap_user_name';
 
+    /** @type {string} 이름별 저장 횟수 스토리지 키 */
+    this.nameStatsKey = 'mindtrap_name_stats';
+
     /** @type {Object|null} 메모리 데이터 */
     this.data = null;
 
@@ -71,6 +74,51 @@ export class Memory {
     }
   }
 
+  _loadNameStats() {
+    try {
+      return JSON.parse(localStorage.getItem(this.nameStatsKey) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  _saveNameStats(stats) {
+    try {
+      localStorage.setItem(this.nameStatsKey, JSON.stringify(stats));
+    } catch (e) {
+      console.error('Failed to save name stats:', e);
+    }
+  }
+
+  _recordNameSave(name) {
+    const cleanName = name ? name.trim().replace(/님$/, '').trim() : '';
+    if (!cleanName) return null;
+
+    const key = this._normalizeUserName(cleanName);
+    const stats = this._loadNameStats();
+    const current = stats[key] || {
+      displayName: cleanName,
+      saveCount: 0,
+      firstSavedAt: Date.now(),
+      lastSavedAt: Date.now(),
+    };
+
+    current.displayName = cleanName;
+    current.saveCount = (current.saveCount || 0) + 1;
+    current.lastSavedAt = Date.now();
+    stats[key] = current;
+    this._saveNameStats(stats);
+    return current;
+  }
+
+  getNameStats(name = this.userName) {
+    const cleanName = name ? name.trim().replace(/님$/, '').trim() : '';
+    if (!cleanName) return null;
+
+    const stats = this._loadNameStats();
+    return stats[this._normalizeUserName(cleanName)] || null;
+  }
+
   /**
    * 유저 이름 로드
    * @private
@@ -87,12 +135,16 @@ export class Memory {
    * 유저 이름 저장
    * @param {string} name - 유저 이름
    */
-  setUserName(name) {
+  setUserName(name, options = {}) {
     const cleanName = name ? name.trim().replace(/님$/, '').trim() : '';
     this.userName = cleanName || null;
     try {
       if (this.userName) {
         localStorage.setItem(this.userNameKey, this.userName);
+        this._rememberProfileName(this.userName);
+        if (options.countSave) {
+          this._recordNameSave(this.userName);
+        }
       } else {
         localStorage.removeItem(this.userNameKey);
       }
@@ -229,18 +281,22 @@ export class Memory {
    */
   getMemorySummary() {
     if (!this.hasMemory()) {
+      const nameStats = this.getNameStats();
       return {
         hasMemory: false,
+        nameSaveCount: nameStats?.saveCount || 0,
         message: '처음 뵙겠습니다.',
       };
     }
 
     const lastGame = this.getLastGame();
     const totalGames = this.getTotalGames();
+    const nameStats = this.getNameStats();
 
     return {
       hasMemory: true,
       totalGames,
+      nameSaveCount: nameStats?.saveCount || 0,
       lastGame: {
         playerType: lastGame.playerType,
         predictionAccuracy: lastGame.predictionAccuracy,
@@ -329,6 +385,7 @@ export class Memory {
       });
       localStorage.removeItem(this.profilesIndexKey);
       localStorage.removeItem(this.storageKey);
+      localStorage.removeItem(this.nameStatsKey);
     } catch (e) {
       console.error('Failed to clear all memory profiles:', e);
     }

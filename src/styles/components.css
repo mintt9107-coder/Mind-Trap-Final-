@@ -848,6 +848,22 @@
   gap: var(--spacing-xs);
 }
 
+.analysis-item--core-summary {
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.analysis-item__core-quote {
+  margin: 0;
+  color: #c084fc;
+  font-size: var(--font-size-xl);
+  font-weight: 900;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .analysis-item__label-row {
   display: flex;
   justify-content: space-between;
@@ -1279,4 +1295,64 @@ body.mindtrap-mode-desktop .result__container {
   .analysis-item__job {
     padding: var(--spacing-sm);
   }
+}
+
+/* User-selected view mode wins over viewport media queries. */
+body.mindtrap-mode-desktop .landing__hero,
+body.mindtrap-mode-desktop .tutorial__container,
+body.mindtrap-mode-desktop .game__container {
+  max-width: 680px;
+}
+
+body.mindtrap-mode-desktop .result__container {
+  max-width: 560px;
+}
+
+body.mindtrap-mode-desktop .landing__hero-cta,
+body.mindtrap-mode-desktop .tutorial__buttons,
+body.mindtrap-mode-desktop .result__profile-actions,
+body.mindtrap-mode-desktop .result__buttons {
+  flex-direction: row;
+  align-items: center;
+}
+
+body.mindtrap-mode-desktop .landing__hero-cta .btn,
+body.mindtrap-mode-desktop .tutorial__buttons .btn,
+body.mindtrap-mode-desktop .result__profile-actions .btn,
+body.mindtrap-mode-desktop .result__buttons .btn {
+  width: auto;
+}
+
+body.mindtrap-mode-desktop .game__top-bar {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+body.mindtrap-mode-desktop .game__top-bar .progress-bar {
+  order: initial;
+  width: auto;
+  flex: 1;
+}
+
+body.mindtrap-mode-mobile .landing__hero,
+body.mindtrap-mode-mobile .tutorial__container,
+body.mindtrap-mode-mobile .game__container,
+body.mindtrap-mode-mobile .result__container {
+  max-width: 430px;
+  width: 100%;
+}
+
+body.mindtrap-mode-mobile .landing__hero-cta,
+body.mindtrap-mode-mobile .tutorial__buttons,
+body.mindtrap-mode-mobile .result__profile-actions,
+body.mindtrap-mode-mobile .result__buttons {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body.mindtrap-mode-mobile .landing__hero-cta .btn,
+body.mindtrap-mode-mobile .tutorial__buttons .btn,
+body.mindtrap-mode-mobile .result__profile-actions .btn,
+body.mindtrap-mode-mobile .result__buttons .btn {
+  width: 100%;
 }

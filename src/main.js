@@ -33,8 +33,6 @@ export class MindTrap {
     // 화면들 초기화
     this.screens = {};
     this.currentScreen = null;
-    this.pendingAiDialogue = null;
-    this.displayedDialogueRound = null;
     this.viewMode = this._loadViewMode();
     this._applyViewMode(this.viewMode);
 
@@ -51,29 +49,23 @@ export class MindTrap {
    */
   _loadAiApiKey() {
     let apiKey = null;
-    let modelId = null;
 
     // window 전역 설정에서 로드 (Next.js page.js에서 주입)
     if (typeof window !== 'undefined' && window.MINDTRAP_CONFIG) {
       apiKey = window.MINDTRAP_CONFIG.OPENROUTER_API_KEY ||
                window.MINDTRAP_CONFIG.openRouter?.apiKey || null;
-      modelId = window.MINDTRAP_CONFIG.openRouter?.modelId || null;
     }
 
     // process.env에서 로드 (빌드 타임)
     if (!apiKey && typeof process !== 'undefined' && process.env) {
       apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || null;
     }
-    if (!modelId && typeof process !== 'undefined' && process.env) {
-      modelId = process.env.NEXT_PUBLIC_OPENROUTER_MODEL_ID || null;
-    }
 
     if (apiKey) {
       this.aiEngine.setApiKey(apiKey);
-      this.aiEngine.setModelId(modelId || 'google/gemini-3.5-flash');
       console.log('%c AI Engine: API Key configured ', 'background: #10b981; color: white; padding: 2px 6px; border-radius: 3px;');
     } else {
-      console.error('AI Engine: OpenRouter API Key not found. Real AI calls are required.');
+      console.warn('AI Engine: API Key not found - falling back to mock mode');
     }
   }
 
@@ -83,67 +75,31 @@ export class MindTrap {
    * @private
    */
   _bindAiEngine() {
-    // 게임 시작 시 AI 엔진 초기화
+    // 게임 시작 시 AI 엔진 초기화. 게임 중 대사는 라운드당 1회만 노출합니다.
     this.gameEngine.addEventListener(GAME_EVENTS.GAME_START, () => {
       this.aiEngine.initialize();
-      this.pendingAiDialogue = '첫 선택부터 조심하세요. 예측을 피하려는 순간, 오히려 심리는 더 선명해집니다.';
-      this.displayedDialogueRound = null;
     });
 
-    // 라운드 시작 시 AI 예측 갱신 + 저장된 심리전 대사 1회 표시
+    // 라운드 시작 시 AI 예측 + 심리전 대사
     this.gameEngine.addEventListener(GAME_EVENTS.ROUND_START, async (data) => {
       const currentQuestion = data.question;
-      const round = data.round;
-      this._showPendingAiDialogueForRound(round);
-
       try {
-        await this.aiEngine.onRoundStart(currentQuestion, { generateDialogue: false });
+        const result = await this.aiEngine.onRoundStart(currentQuestion);
+        if (result?.dialogue) {
+          this._showAiDialogue(result.dialogue);
+        }
       } catch (error) {
         console.error('AI round start error:', error);
       }
     });
 
-    // 유저 선택 즉각 반영 - onRoundEnd로 학습 + 예측 결과 대사
-    this.gameEngine.addEventListener(GAME_EVENTS.CHOICE_MADE, async (roundData) => {
-      // AI 학습 수행 (플레이어 모델 업데이트)
+    // 유저 선택은 학습에만 반영합니다. 게임 중 AI 대사는 라운드당 1회만 노출합니다.
+    this.gameEngine.addEventListener(GAME_EVENTS.CHOICE_MADE, (roundData) => {
       this.aiEngine.onRoundEnd(roundData);
-
-      // 예측 결과 대사 생성 (맞았는지 틀렸는지) - roundData 전달
-      try {
-        const wasCorrect = this.aiEngine.lastPrediction
-          ? this.aiEngine.lastPrediction.prediction === roundData.choice
-          : false;
-        const dialogue = await this.aiEngine.generatePredictionResultDialogue(wasCorrect, roundData);
-        if (dialogue) {
-          this.pendingAiDialogue = dialogue;
-          const currentRound = this.gameEngine.roundManager.currentRound;
-          if (currentRound === roundData.round + 1) {
-            this._showPendingAiDialogueForRound(currentRound);
-          } else if (currentRound > roundData.round + 1) {
-            this.pendingAiDialogue = null;
-          }
-        }
-      } catch (error) {
-        console.error('AI choice dialogue error:', error);
-      }
     });
 
-    this.gameEngine.addEventListener(GAME_EVENTS.TIME_EXPIRED, async (roundData) => {
+    this.gameEngine.addEventListener(GAME_EVENTS.TIME_EXPIRED, (roundData) => {
       this.aiEngine.onRoundEnd(roundData);
-      try {
-        const dialogue = await this.aiEngine.generatePredictionResultDialogue(false, roundData);
-        if (dialogue) {
-          this.pendingAiDialogue = dialogue;
-          const currentRound = this.gameEngine.roundManager.currentRound;
-          if (currentRound === roundData.round + 1) {
-            this._showPendingAiDialogueForRound(currentRound);
-          } else if (currentRound > roundData.round + 1) {
-            this.pendingAiDialogue = null;
-          }
-        }
-      } catch (error) {
-        console.error('AI timeout dialogue error:', error);
-      }
     });
 
     // 게임 종료 시 최종 분석 리포트 + 프로필 생성
@@ -183,17 +139,6 @@ export class MindTrap {
     }
   }
 
-  _showPendingAiDialogueForRound(round) {
-    if (!this.pendingAiDialogue) return;
-    if (this.displayedDialogueRound === round) {
-      this.pendingAiDialogue = null;
-      return;
-    }
-    this._showAiDialogue(this.pendingAiDialogue);
-    this.pendingAiDialogue = null;
-    this.displayedDialogueRound = round;
-  }
-
   _loadViewMode() {
     if (typeof window === 'undefined') return 'desktop';
     const savedMode = window.localStorage.getItem('mindtrap_view_mode');
@@ -203,11 +148,12 @@ export class MindTrap {
 
   _applyViewMode(mode) {
     if (typeof document === 'undefined') return;
+    const normalizedMode = mode === 'mobile' ? 'mobile' : 'desktop';
     document.body.classList.remove('mindtrap-mode-desktop', 'mindtrap-mode-mobile');
-    document.body.classList.add(`mindtrap-mode-${mode}`);
-    document.body.dataset.viewMode = mode;
+    document.body.classList.add(`mindtrap-mode-${normalizedMode}`);
+    document.body.dataset.viewMode = normalizedMode;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('mindtrap_view_mode', mode);
+      window.localStorage.setItem('mindtrap_view_mode', normalizedMode);
     }
   }
 
@@ -254,13 +200,13 @@ export class MindTrap {
       },
       initialUserName: this.aiEngine.getMemory().getUserName() || '',
       onSaveUserName: (name) => {
-        this.aiEngine.getMemory().setUserName(name);
+        this.aiEngine.getMemory().setUserName(name, { countSave: true });
         return this.aiEngine.getMemory().getMemorySummary();
       },
       viewMode: this.viewMode,
       onChangeViewMode: (mode) => {
-        this.viewMode = mode;
-        this._applyViewMode(mode);
+        this.viewMode = mode === 'mobile' ? 'mobile' : 'desktop';
+        this._applyViewMode(this.viewMode);
       },
       onResetMemory: () => {
         this.aiEngine.getMemory().clearAll();

@@ -78,11 +78,25 @@ const QUESTION_POOL = [
  * 2단계 선택지 시나리오 템플릿
  */
 const TWO_STAGE_SCENARIOS = [
-  { aiMessage: '흥미로운 선택입니다. 하지만 {otherChoice} 쪽은 더 신중한 판단처럼 보입니다. 선택을 유지하시겠습니까, 바꾸시겠습니까?' },
-  { aiMessage: '방금 선택에서 당신의 기준이 드러났습니다. 반대로 {otherChoice}를 고르면 전혀 다른 성향이 나타납니다. 바꾸시겠습니까?' },
-  { aiMessage: '지금 선택을 유지하면 일관성이 강해지고, {otherChoice}로 바꾸면 적응력이 드러납니다. 어떻게 하시겠습니까?' },
-  { aiMessage: '당신은 {otherChoice}를 피했습니다. 회피인지 확신인지 확인하고 싶군요. 선택을 바꾸시겠습니까?' },
+  { mode: 'same', aiMessage: '대부분의 사람들은 {otherChoice}를 골랐습니다. 바꾸시겠습니까?' },
+  { mode: 'same', aiMessage: '{otherChoice}를 고른 사람들은 후회가 적었습니다. 지금 선택은 확신입니까, 반사적인 선택입니까?' },
+  { mode: 'same', aiMessage: '흥미롭군요. {otherChoice} 쪽이 더 안전해 보이는데도 피하셨습니다. 계속 유지하시겠습니까?' },
+  { mode: 'same', aiMessage: '방금 선택은 꽤 빠르게 나왔습니다. 한 번 더 생각하면 {otherChoice}가 더 그럴듯해 보이지 않습니까?' },
+  { mode: 'same', aiMessage: '지금 유지하면 일관성으로 보이고, {otherChoice}로 바꾸면 흔들림으로 보입니다. 어느 쪽을 남기겠습니까?' },
+  { mode: 'reframe', aiMessage: '같은 선택을 다른 말로 묻겠습니다. 이번에는 어느 쪽이 더 당신답습니까?' },
+  { mode: 'reframe', aiMessage: '질문을 바꿔도 선택 기준은 남습니다. 지금 더 끌리는 쪽을 고르십시오.' },
+  { mode: 'reframe', aiMessage: '표현만 바꿨습니다. 방금 선택이 정말 본심인지 다시 보겠습니다.' },
 ];
+
+const REFRAMED_PROMPTS = {
+  [QUESTION_TYPES.DIRECTION]: '익숙한 신호와 낯선 가능성 중, 지금 더 믿고 싶은 쪽은 무엇입니까?',
+  [QUESTION_TYPES.COMBAT]: '압박 앞에서 주도권을 잡겠습니까, 아니면 상대의 움직임을 먼저 읽겠습니까?',
+  [QUESTION_TYPES.RISK]: '손실을 피하는 선택과 가능성을 붙잡는 선택 중, 지금 더 끌리는 쪽은 무엇입니까?',
+  [QUESTION_TYPES.TIME]: '기다림으로 통제하시겠습니까, 빠른 행동으로 흐름을 가져가시겠습니까?',
+  [QUESTION_TYPES.REWARD]: '작지만 확실한 만족과 크지만 불확실한 보상 중, 어느 쪽이 더 솔직합니까?',
+  [QUESTION_TYPES.EMOTION]: '외부의 판단을 받아들이는 쪽과 끝까지 의심하는 쪽 중 어디에 가깝습니까?',
+  [QUESTION_TYPES.SPEED]: '즉각적인 직감과 늦더라도 검토하는 판단 중, 지금 어느 쪽을 택하겠습니까?',
+};
 
 /**
  * QuestionGenerator 클래스
@@ -156,9 +170,17 @@ export class QuestionGenerator {
     return {
       aiMessage,
       choices: {
-        primary: '처음 선택을 유지한다',
-        secondary: `${otherChoiceText}로 바꾼다`,
+        primary: question.twoStageScenario.mode === 'reframe'
+          ? question.choices[userChoice]
+          : '유지한다',
+        secondary: question.twoStageScenario.mode === 'reframe'
+          ? otherChoiceText
+          : '바꾼다',
       },
+      prompt: question.twoStageScenario.mode === 'reframe'
+        ? REFRAMED_PROMPTS[question.type] || question.prompt
+        : null,
+      mode: question.twoStageScenario.mode || 'same',
       originalChoice: userChoice,
       otherChoice: otherChoiceKey,
     };

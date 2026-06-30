@@ -196,7 +196,7 @@ export const createGameScreen = ({ gameEngine }) => {
 
     aiDialogueText.textContent = '';
     let i = 0;
-    const speed = 35;
+    const speed = 12;
     const typeNext = () => {
       if (activeToken !== dialogueToken) return;
       if (i < dialogue.length) {
@@ -266,8 +266,9 @@ export const createGameScreen = ({ gameEngine }) => {
   });
 
   // 2단계 선택지 이벤트
-  gameEngine.addEventListener(GAME_EVENTS.TWO_STAGE, ({ choices }) => {
-    questionPrompt.textContent = '처음 선택을 유지할지, 다른 선택으로 바꿀지 결정하세요.';
+  gameEngine.addEventListener(GAME_EVENTS.TWO_STAGE, ({ aiMessage, prompt, choices }) => {
+    questionPrompt.textContent = '';
+    questionText.textContent = prompt || aiMessage || '처음 선택을 유지할지, 다른 선택으로 바꿀지 결정하세요.';
     setTwoChoices(choices.primary, choices.secondary);
     enable();
     updateTimer(GAME_CONFIG.ROUND_TIME_LIMIT);
