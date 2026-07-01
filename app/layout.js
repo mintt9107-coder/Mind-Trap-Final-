@@ -4,7 +4,7 @@ import '../src/styles/components.css';
 import '../src/styles/landing.css';
 
 export const metadata = {
-  title: 'MindTrap',
+  title: 'Mind Trap - 당신의 망설임까지 분석하는 AI',
   description: 'MindTrap - AI는 당신을 분석합니다. 그리고 기억합니다.',
 };
 
