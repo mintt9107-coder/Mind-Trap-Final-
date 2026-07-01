@@ -178,12 +178,12 @@ function LandingPage({ onStart }) {
           <div className="lp__step lp__reveal">
             <div className="lp__step-num">1</div>
             <h3 className="lp__step-title">선택하세요</h3>
-            <p className="lp__step-desc">각 라운드에서 2개 또는 4개의 선택지 중 하나를 고릅니다. 제한 시간 안에서 당신의 성향과 행동패턴이 드러납니다.</p>
+            <p className="lp__step-desc">각 라운드에서 2개 또는 4개의 선택지 중 하나를 고릅니다. 10초의 제한 시간 안에서 당신의 성향과 행동패턴이 드러납니다.</p>
           </div>
           <div className="lp__step lp__reveal">
             <div className="lp__step-num">2</div>
             <h3 className="lp__step-title">AI가 기록하고 예측합니다</h3>
-            <p className="lp__step-desc">AI가 당신의 선택을 기록하고 다음 선택을 예측합니다. 반응 속도, 일관성, 반복 패턴을 모두 분석합니다.</p>
+            <p className="lp__step-desc">AI가 당신의 선택을 기록하고 다음 선택을 예측합니다. 무엇을 골랐는지만 보는것이 아니라 선택의 방향, 반응 속도, 커서의 흔들림, 선택을 바꾸는 순간, 일부러 늦춘 반응까지 모두 분석의 단서가 됩니다.</p>
           </div>
           <div className="lp__step lp__reveal">
             <div className="lp__step-num">3</div>
@@ -193,7 +193,7 @@ function LandingPage({ onStart }) {
           <div className="lp__step lp__reveal">
             <div className="lp__step-num">4</div>
             <h3 className="lp__step-title">분석 결과를 확인하세요</h3>
-            <p className="lp__step-desc">게임 종료 후 AI가 당신을 분석한 상세 리포트와 행동 프로필을 받습니다.</p>
+            <p className="lp__step-desc">게임 종료 후 AI가 당신을 분석한 상세 리포트와 행동 프로필을 받습니다. 총 33개의 유형 중 당신은 과연 어떤 유형일까요?</p>
           </div>
         </div>
       </section>
